@@ -1,12 +1,13 @@
 package com.restcountries.controller;
 
 
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import com.restcountries.dto.CountryDetailsDto;
 import com.restcountries.dto.NeighborCountryDto;
@@ -30,6 +31,7 @@ public class CountryController {
         this.restTemplate = restTemplate;
     }
 
+    @Cacheable(value = "countries", key = "#nameOrCode")
     @GetMapping("/{nameOrCode}")
     public ResponseEntity<Object> getCountryInfo(@PathVariable String nameOrCode) {
         try {
@@ -145,7 +147,7 @@ public class CountryController {
         return (list != null && !list.isEmpty()) ? list.get(0) : null;
     }
 
-
+    @Cacheable(value = "neighbors", key = "#countryName")
     @GetMapping("/{countryName}/neighbors")
     public ResponseEntity<Object> getNeighbors(@PathVariable String countryName) {
         try {
@@ -153,6 +155,7 @@ public class CountryController {
             String url = "https://restcountries.com/v3.1/name/" + countryName;
             ResponseEntity<List> response = restTemplate.exchange(url, HttpMethod.GET, null, List.class);
 
+            // Verificamos si la respuesta es exitosa (200 OK) y si la lista no está vacía
             if (response.getStatusCode().is2xxSuccessful() && !response.getBody().isEmpty()) {
                 // Extraemos el primer país de la lista (en caso de que haya más de uno)
                 Map<String, Object> country = (Map<String, Object>) response.getBody().get(0);
@@ -169,8 +172,15 @@ public class CountryController {
 
                         if (neighborResponse.getStatusCode().is2xxSuccessful() && !neighborResponse.getBody().isEmpty()) {
                             Map<String, Object> neighborCountry = (Map<String, Object>) neighborResponse.getBody().get(0);
-                            String neighborName = (String) neighborCountry.get("name");
+
+                            // Obtener el nombre común del país vecino
+                            Map<String, String> name = (Map<String, String>) neighborCountry.get("name");
+                            String neighborName = name.get("common");  // Utilizamos 'common' para el nombre corto
+
                             neighborNames.add(neighborName);
+                        } else {
+                            // Si no encontramos información del vecino, lo manejamos
+                            neighborNames.add("Desconocido");
                         }
                     }
                     return ResponseEntity.ok(neighborNames); // Devolvemos la lista de nombres de países vecinos
@@ -178,14 +188,17 @@ public class CountryController {
                     return ResponseEntity.ok(Collections.emptyList()); // Si no tiene vecinos, devolvemos una lista vacía
                 }
             } else {
-                return ResponseEntity.status(404).body("El país '" + countryName + "' no fue encontrado.");
+                // Si la respuesta de la API externa no es exitosa
+                String errorMessage = "El país '" + countryName + "' no fue encontrado o no es válido. Respuesta: " + response.getStatusCode();
+                return ResponseEntity.status(404).body(errorMessage);
             }
         } catch (HttpClientErrorException.NotFound e) {
-            // En caso de error 404 de la API externa
+            // Manejo explícito de error 404 cuando la API no encuentra el país
             return ResponseEntity.status(404).body("El país '" + countryName + "' no fue encontrado.");
         } catch (Exception e) {
-            // Manejo de otros errores
-            return ResponseEntity.status(500).body("Ocurrió un error interno en el servidor.");
+            // Capturamos cualquier otra excepción y mostramos un mensaje más detallado
+            return ResponseEntity.status(500).body("Error al obtener los datos: " + e.getMessage());
         }
     }
+
 }

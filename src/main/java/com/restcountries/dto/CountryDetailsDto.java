@@ -68,4 +68,5 @@ public class CountryDetailsDto {
     public void setNeighbors(List<NeighborCountryDto> neighbors) {
         this.neighbors = neighbors;
     }
+
 }

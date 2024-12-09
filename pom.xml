@@ -34,6 +34,16 @@
             <scope>test</scope>
             <version>${spring.boot.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+            <version>${spring.boot.version}</version>  <!-- Se debe usar la misma versión que en el resto del proyecto -->
+        </dependency>
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+            <version>3.1.5</version>
+        </dependency>
     </dependencies>
 
     <build>
