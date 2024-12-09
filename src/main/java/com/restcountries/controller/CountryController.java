@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 import com.restcountries.dto.CountryDetailsDto;
 import com.restcountries.dto.NeighborCountryDto;
@@ -30,7 +31,7 @@ public class CountryController {
     }
 
     @GetMapping("/{nameOrCode}")
-    public ResponseEntity<CountryDetailsDto> getCountryInfo(@PathVariable String nameOrCode) {
+    public ResponseEntity<Object> getCountryInfo(@PathVariable String nameOrCode) {
         try {
             // Log de la URL que se va a consultar
             String url = apiUrl + "/v3.1/name/" + nameOrCode + "?fullText=true";
@@ -49,7 +50,7 @@ public class CountryController {
 
             if (response.getBody() == null || response.getBody().isEmpty()) {
                 System.out.println("Country not found.");
-                return ResponseEntity.notFound().build();
+                return ResponseEntity.status(404).body("El país '" + nameOrCode + "' no fue encontrado.");
             }
 
             Map<String, Object> countryData = response.getBody().get(0);
@@ -59,6 +60,8 @@ public class CountryController {
             countryDetails.setOfficialName(getNestedValue(countryData, "name", "official"));
             countryDetails.setCapital(getFirstElement((List<String>) countryData.get("capital")));
             countryDetails.setRegion((String) countryData.get("region"));
+
+            // Procesar la población
             Object populationObj = countryData.get("population");
             Long population = null;
             if (populationObj instanceof Long) {
@@ -67,19 +70,25 @@ public class CountryController {
                 population = ((Integer) populationObj).longValue();
             }
             countryDetails.setPopulation(population);
+
+            // Procesar la URL de la bandera
             countryDetails.setFlagUrl(getNestedValue(countryData, "flags", "png"));
             countryDetails.setOfficialLanguages((Map<String, String>) countryData.get("languages"));
 
+            // Procesar las fronteras y obtener los países vecinos
             List<String> borders = (List<String>) countryData.get("borders");
             List<NeighborCountryDto> neighbors = getNeighborDetails(borders);
             countryDetails.setNeighbors(neighbors);
 
             System.out.println("Country details: " + countryDetails);
 
-            return ResponseEntity.ok(countryDetails);
+            return ResponseEntity.ok(countryDetails);  // Devuelve los detalles del país
+        } catch (HttpClientErrorException.NotFound e) {
+            // En caso de error 404 de la API externa
+            return ResponseEntity.status(404).body("El país '" + nameOrCode + "' no fue encontrado.");
         } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(500).body(null);
+            // Manejo de otros errores
+            return ResponseEntity.status(500).body("Ocurrió un error interno en el servidor.");
         }
     }
 
@@ -139,40 +148,44 @@ public class CountryController {
 
     @GetMapping("/{countryName}/neighbors")
     public ResponseEntity<Object> getNeighbors(@PathVariable String countryName) {
-        // Realizamos la consulta usando el nombre del país para obtener los detalles del país
-        String url = "https://restcountries.com/v3.1/name/" + countryName;
-        ResponseEntity<List> response = restTemplate.exchange(url, org.springframework.http.HttpMethod.GET, null, List.class);
+        try {
+            // Realizamos la consulta usando el nombre del país para obtener los detalles del país
+            String url = "https://restcountries.com/v3.1/name/" + countryName;
+            ResponseEntity<List> response = restTemplate.exchange(url, HttpMethod.GET, null, List.class);
 
-        if (response.getStatusCode().is2xxSuccessful() && !response.getBody().isEmpty()) {
-            // Extraemos el primer país de la lista (en caso de que haya más de uno)
-            Map<String, Object> country = (Map<String, Object>) response.getBody().get(0);
+            if (response.getStatusCode().is2xxSuccessful() && !response.getBody().isEmpty()) {
+                // Extraemos el primer país de la lista (en caso de que haya más de uno)
+                Map<String, Object> country = (Map<String, Object>) response.getBody().get(0);
 
-            // Obtenemos los países vecinos (si existen) desde el campo "borders"
-            List<String> neighbors = (List<String>) country.get("borders");
+                // Obtenemos los países vecinos (si existen) desde el campo "borders"
+                List<String> neighbors = (List<String>) country.get("borders");
 
-            if (neighbors != null) {
-                // Traducimos los códigos alfa-3 a nombres de países
-                List<String> neighborNames = new ArrayList<>();
-                for (String neighborCode : neighbors) {
-                    String neighborUrl = "https://restcountries.com/v3.1/alpha/" + neighborCode;
-                    ResponseEntity<List> neighborResponse = restTemplate.exchange(neighborUrl, org.springframework.http.HttpMethod.GET, null, List.class);
+                if (neighbors != null && !neighbors.isEmpty()) {
+                    // Traducimos los códigos alfa-3 a nombres de países
+                    List<String> neighborNames = new ArrayList<>();
+                    for (String neighborCode : neighbors) {
+                        String neighborUrl = "https://restcountries.com/v3.1/alpha/" + neighborCode;
+                        ResponseEntity<List> neighborResponse = restTemplate.exchange(neighborUrl, HttpMethod.GET, null, List.class);
 
-                    if (neighborResponse.getStatusCode().is2xxSuccessful() && !neighborResponse.getBody().isEmpty()) {
-                        Map<String, Object> neighborCountry = (Map<String, Object>) neighborResponse.getBody().get(0);
-
-                        // Obtener el nombre común del país vecino
-                        Map<String, String> name = (Map<String, String>) neighborCountry.get("name");
-                        String neighborName = name.get("common");  // Utilizamos 'common' para el nombre corto
-
-                        neighborNames.add(neighborName);
+                        if (neighborResponse.getStatusCode().is2xxSuccessful() && !neighborResponse.getBody().isEmpty()) {
+                            Map<String, Object> neighborCountry = (Map<String, Object>) neighborResponse.getBody().get(0);
+                            String neighborName = (String) neighborCountry.get("name");
+                            neighborNames.add(neighborName);
+                        }
                     }
+                    return ResponseEntity.ok(neighborNames); // Devolvemos la lista de nombres de países vecinos
+                } else {
+                    return ResponseEntity.ok(Collections.emptyList()); // Si no tiene vecinos, devolvemos una lista vacía
                 }
-                return ResponseEntity.ok(neighborNames); // Devolvemos la lista de nombres de países vecinos
             } else {
-                return ResponseEntity.ok(Collections.emptyList()); // Si no tiene vecinos, devolvemos una lista vacía
+                return ResponseEntity.status(404).body("El país '" + countryName + "' no fue encontrado.");
             }
+        } catch (HttpClientErrorException.NotFound e) {
+            // En caso de error 404 de la API externa
+            return ResponseEntity.status(404).body("El país '" + countryName + "' no fue encontrado.");
+        } catch (Exception e) {
+            // Manejo de otros errores
+            return ResponseEntity.status(500).body("Ocurrió un error interno en el servidor.");
         }
-
-        return ResponseEntity.status(500).body("Error al obtener los datos"); // Si algo falla
     }
 }
