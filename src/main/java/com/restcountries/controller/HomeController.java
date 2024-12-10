@@ -10,6 +10,8 @@ public class HomeController {
 
     @GetMapping
     public String home() {
-        return "Bienvenido a la API de países. Usa /country/{nameOrCode} para obtener información de un país.";
+        return "Bienvenido a la API de paises.\n"+"Usa /country/{nameOrCode} para obtener informacion de un pais.\n"+
+                "Usa /country/{nameOrCode}/neighbors para obtener informacion de los paises limitrofes a dicho pais.\n";
+
     }
 }

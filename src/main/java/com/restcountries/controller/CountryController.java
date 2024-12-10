@@ -1,15 +1,20 @@
 package com.restcountries.controller;
 
-
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.client.RestTemplate;
 import com.restcountries.dto.CountryDetailsDto;
 import com.restcountries.dto.NeighborCountryDto;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestTemplate;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.Parameter;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -29,99 +34,170 @@ public class CountryController {
         this.restTemplate = restTemplate;
     }
 
+    @Cacheable(value = "countries", key = "#nameOrCode")
+    @Operation(summary = "Get country details", description = "Fetches details of a country by its name or alpha code.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Country details retrieved successfully"),
+            @ApiResponse(responseCode = "404", description = "Country not found"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
     @GetMapping("/{nameOrCode}")
-    public ResponseEntity<CountryDetailsDto> getCountryInfo(@PathVariable String nameOrCode) {
+    public ResponseEntity<Object> getCountryInfo(
+            @Parameter(description = "Name or alpha code of the country", example = "Spain or ES")
+            @PathVariable String nameOrCode) {
         try {
-            // Log de la URL que se va a consultar
-            String url = apiUrl + "/v3.1/name/" + nameOrCode + "?fullText=true";
-            System.out.println("Fetching data from URL: " + url);
+            String url;
+            ResponseEntity<List<Map<String, Object>>> response;
 
-            ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.GET,
-                    null,
-                    new ParameterizedTypeReference<>() {
-                    }
-            );
+            // Attempt to fetch by full name
+            url = apiUrl + "/v3.1/name/" + nameOrCode + "?fullText=true";
+            response = fetchApiResponse(url);
 
-            // Verifica la respuesta
-            System.out.println("API response: " + response.getBody());
-
+            // If not found, try alpha code
             if (response.getBody() == null || response.getBody().isEmpty()) {
-                System.out.println("Country not found.");
-                return ResponseEntity.notFound().build();
+                url = apiUrl + "/v3.1/alpha/" + nameOrCode;
+                response = fetchApiResponse(url);
+            }
+
+            // If still not found
+            if (response.getBody() == null || response.getBody().isEmpty()) {
+                return ResponseEntity.status(404).body("El país '" + nameOrCode + "' no fue encontrado.");
             }
 
             Map<String, Object> countryData = response.getBody().get(0);
-
-            // Procesar y verificar cada campo
-            CountryDetailsDto countryDetails = new CountryDetailsDto();
-            countryDetails.setOfficialName(getNestedValue(countryData, "name", "official"));
-            countryDetails.setCapital(getFirstElement((List<String>) countryData.get("capital")));
-            countryDetails.setRegion((String) countryData.get("region"));
-            Object populationObj = countryData.get("population");
-            Long population = null;
-            if (populationObj instanceof Long) {
-                population = (Long) populationObj;
-            } else if (populationObj instanceof Integer) {
-                population = ((Integer) populationObj).longValue();
-            }
-            countryDetails.setPopulation(population);
-            countryDetails.setFlagUrl(getNestedValue(countryData, "flags", "png"));
-            countryDetails.setOfficialLanguages((Map<String, String>) countryData.get("languages"));
-
-            List<String> borders = (List<String>) countryData.get("borders");
-            List<NeighborCountryDto> neighbors = getNeighborDetails(borders);
-            countryDetails.setNeighbors(neighbors);
-
-            System.out.println("Country details: " + countryDetails);
-
+            CountryDetailsDto countryDetails = buildCountryDetails(countryData);
             return ResponseEntity.ok(countryDetails);
+        } catch (HttpClientErrorException.NotFound e) {
+            return ResponseEntity.status(404).body("El país '" + nameOrCode + "' no fue encontrado.");
         } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(500).body(null);
+            return ResponseEntity.status(500).body("Ocurrió un error interno en el servidor.");
         }
     }
 
+    @Cacheable(value = "neighbors", key = "#countryName")
+    @Operation(summary = "Get neighboring countries", description = "Fetches a list of neighboring countries for a given country.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Neighboring countries retrieved successfully"),
+            @ApiResponse(responseCode = "404", description = "Country not found"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @GetMapping("/{countryName}/neighbors")
+    public ResponseEntity<Object> getNeighbors(
+            @Parameter(description = "Name or alpha code of the country", example = "France or FRA")
+            @PathVariable String countryName) {
+        try {
+            String url = apiUrl + "/v3.1/name/" + countryName + "?fullText=true";
+            ResponseEntity<List<Map<String, Object>>> response = fetchApiResponse(url);
+
+            // If not found, try alpha code
+            if (response.getBody() == null || response.getBody().isEmpty()) {
+                url = apiUrl + "/v3.1/alpha/" + countryName;
+                response = fetchApiResponse(url);
+            }
+
+            // If still not found
+            if (response.getBody() == null || response.getBody().isEmpty()) {
+                return ResponseEntity.status(404).body("El país '" + countryName + "' no fue encontrado.");
+            }
+
+            Map<String, Object> countryData = response.getBody().get(0);
+            List<String> borders = (List<String>) countryData.get("borders");
+
+            if (borders == null || borders.isEmpty()) {
+                return ResponseEntity.ok(Collections.emptyList()); // No neighbors
+            }
+
+            List<String> neighborNames = fetchNeighborNames(borders);
+            return ResponseEntity.ok(neighborNames);
+        } catch (HttpClientErrorException.NotFound e) {
+            return ResponseEntity.status(404).body("El país '" + countryName + "' no fue encontrado.");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Error al obtener los datos: " + e.getMessage());
+        }
+    }
+
+
+    // Helper Methods
+    private ResponseEntity<List<Map<String, Object>>> fetchApiResponse(String url) {
+        try {
+            return restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    null,
+                    new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+            );
+        } catch (HttpClientErrorException.NotFound e) {
+            return ResponseEntity.status(404).body(Collections.emptyList());
+        }
+    }
+
+    private CountryDetailsDto buildCountryDetails(Map<String, Object> countryData) {
+        CountryDetailsDto details = new CountryDetailsDto();
+
+        details.setOfficialName(getNestedValue(countryData, "name", "official"));
+        details.setCapital(getFirstElement((List<String>) countryData.get("capital")));
+        details.setRegion((String) countryData.get("region"));
+        details.setPopulation(getPopulationValue(countryData.get("population")));
+        details.setFlagUrl(getNestedValue(countryData, "flags", "png"));
+        details.setOfficialLanguages((Map<String, String>) countryData.get("languages"));
+
+        List<String> borders = (List<String>) countryData.get("borders");
+        details.setNeighbors(getNeighborDetails(borders));
+
+        return details;
+    }
+
     private List<NeighborCountryDto> getNeighborDetails(List<String> borders) {
-        List<NeighborCountryDto> neighbors = new ArrayList<>();
         if (borders == null || borders.isEmpty()) {
-            return neighbors;
+            return Collections.emptyList();
         }
 
+        List<NeighborCountryDto> neighbors = new ArrayList<>();
         for (String border : borders) {
-            String neighborUrl = apiUrl + "/v3.1/alpha/" + border;
             try {
-                ResponseEntity<List<Map<String, Object>>> neighborResponse = restTemplate.exchange(
-                        neighborUrl,
-                        HttpMethod.GET,
-                        null,
-                        new ParameterizedTypeReference<>() {
-                        }
-                );
+                String neighborUrl = apiUrl + "/v3.1/alpha/" + border;
+                ResponseEntity<List<Map<String, Object>>> response = fetchApiResponse(neighborUrl);
 
-                if (neighborResponse.getBody() != null && !neighborResponse.getBody().isEmpty()) {
-                    Map<String, Object> neighborData = neighborResponse.getBody().get(0);
+                if (response.getBody() != null && !response.getBody().isEmpty()) {
+                    Map<String, Object> neighborData = response.getBody().get(0);
                     NeighborCountryDto neighbor = new NeighborCountryDto();
-
                     neighbor.setName(getNestedValue(neighborData, "name", "common"));
                     neighbor.setCapital(getFirstElement((List<String>) neighborData.get("capital")));
-                    Object populationObj = neighborData.get("population");
-                    Long populationC = null;
-                    if (populationObj instanceof Long) {
-                        populationC = (Long) populationObj;
-                    } else if (populationObj instanceof Integer) {
-                        populationC = ((Integer) populationObj).longValue();
-                    }
-                    neighbor.setPopulation(populationC);
+                    neighbor.setPopulation(getPopulationValue(neighborData.get("population")));
                     neighbors.add(neighbor);
                 }
             } catch (Exception e) {
-                System.err.println("Failed to fetch data for neighbor: " + border + " - " + e.getMessage());
+                System.err.println("Error fetching data for neighbor: " + border + " - " + e.getMessage());
             }
         }
-
         return neighbors;
+    }
+
+    private List<String> fetchNeighborNames(List<String> borders) {
+        List<String> neighborNames = new ArrayList<>();
+        for (String border : borders) {
+            try {
+                String neighborUrl = apiUrl + "/v3.1/alpha/" + border;
+                ResponseEntity<List<Map<String, Object>>> response = fetchApiResponse(neighborUrl);
+
+                if (response.getBody() != null && !response.getBody().isEmpty()) {
+                    Map<String, Object> neighborData = response.getBody().get(0);
+                    neighborNames.add(getNestedValue(neighborData, "name", "common"));
+                }
+            } catch (Exception e) {
+                neighborNames.add("Desconocido");
+            }
+        }
+        return neighborNames;
+    }
+
+    private Long getPopulationValue(Object populationObj) {
+        if (populationObj instanceof Long) {
+            return (Long) populationObj;
+        } else if (populationObj instanceof Integer) {
+            return ((Integer) populationObj).longValue();
+        }
+        return null;
     }
 
     private String getNestedValue(Map<String, Object> map, String key, String nestedKey) {
@@ -136,43 +212,4 @@ public class CountryController {
         return (list != null && !list.isEmpty()) ? list.get(0) : null;
     }
 
-
-    @GetMapping("/{countryName}/neighbors")
-    public ResponseEntity<Object> getNeighbors(@PathVariable String countryName) {
-        // Realizamos la consulta usando el nombre del país para obtener los detalles del país
-        String url = "https://restcountries.com/v3.1/name/" + countryName;
-        ResponseEntity<List> response = restTemplate.exchange(url, org.springframework.http.HttpMethod.GET, null, List.class);
-
-        if (response.getStatusCode().is2xxSuccessful() && !response.getBody().isEmpty()) {
-            // Extraemos el primer país de la lista (en caso de que haya más de uno)
-            Map<String, Object> country = (Map<String, Object>) response.getBody().get(0);
-
-            // Obtenemos los países vecinos (si existen) desde el campo "borders"
-            List<String> neighbors = (List<String>) country.get("borders");
-
-            if (neighbors != null) {
-                // Traducimos los códigos alfa-3 a nombres de países
-                List<String> neighborNames = new ArrayList<>();
-                for (String neighborCode : neighbors) {
-                    String neighborUrl = "https://restcountries.com/v3.1/alpha/" + neighborCode;
-                    ResponseEntity<List> neighborResponse = restTemplate.exchange(neighborUrl, org.springframework.http.HttpMethod.GET, null, List.class);
-
-                    if (neighborResponse.getStatusCode().is2xxSuccessful() && !neighborResponse.getBody().isEmpty()) {
-                        Map<String, Object> neighborCountry = (Map<String, Object>) neighborResponse.getBody().get(0);
-
-                        // Obtener el nombre común del país vecino
-                        Map<String, String> name = (Map<String, String>) neighborCountry.get("name");
-                        String neighborName = name.get("common");  // Utilizamos 'common' para el nombre corto
-
-                        neighborNames.add(neighborName);
-                    }
-                }
-                return ResponseEntity.ok(neighborNames); // Devolvemos la lista de nombres de países vecinos
-            } else {
-                return ResponseEntity.ok(Collections.emptyList()); // Si no tiene vecinos, devolvemos una lista vacía
-            }
-        }
-
-        return ResponseEntity.status(500).body("Error al obtener los datos"); // Si algo falla
-    }
 }

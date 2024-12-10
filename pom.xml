@@ -10,7 +10,7 @@
     <packaging>jar</packaging>
 
     <properties>
-        <java.version>15</java.version> <!-- Java 15 -->
+        <java.version>11</java.version> <!-- Java 15 -->
         <spring.boot.version>2.7.15</spring.boot.version> <!-- Spring Boot version -->
     </properties>
 
@@ -34,6 +34,21 @@
             <scope>test</scope>
             <version>${spring.boot.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+            <version>${spring.boot.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+            <version>3.1.5</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-ui</artifactId>
+            <version>1.7.0</version>
+        </dependency>
     </dependencies>
 
     <build>
@@ -43,8 +58,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.8.1</version> <!-- Correct compiler version -->
                 <configuration>
-                    <source>15</source>  <!-- Set source to Java 15 -->
-                    <target>15</target>  <!-- Set target to Java 15 -->
+                    <source>11</source>  <!-- Set source to Java 15 -->
+                    <target>11</target>  <!-- Set target to Java 15 -->
                 </configuration>
             </plugin>
             <!-- Spring Boot Maven Plugin to package the application -->
