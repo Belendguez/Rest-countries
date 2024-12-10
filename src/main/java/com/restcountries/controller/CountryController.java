@@ -11,6 +11,11 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.Parameter;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -30,30 +35,36 @@ public class CountryController {
     }
 
     @Cacheable(value = "countries", key = "#nameOrCode")
+    @Operation(summary = "Get country details", description = "Fetches details of a country by its name or alpha code.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Country details retrieved successfully"),
+            @ApiResponse(responseCode = "404", description = "Country not found"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
     @GetMapping("/{nameOrCode}")
-    public ResponseEntity<Object> getCountryInfo(@PathVariable String nameOrCode) {
+    public ResponseEntity<Object> getCountryInfo(
+            @Parameter(description = "Name or alpha code of the country", example = "Spain or ES")
+            @PathVariable String nameOrCode) {
         try {
             String url;
             ResponseEntity<List<Map<String, Object>>> response;
 
-            // Intentar buscar primero por nombre completo
+            // Attempt to fetch by full name
             url = apiUrl + "/v3.1/name/" + nameOrCode + "?fullText=true";
             response = fetchApiResponse(url);
 
-            // Si no se encuentra por nombre, intentar por código
+            // If not found, try alpha code
             if (response.getBody() == null || response.getBody().isEmpty()) {
                 url = apiUrl + "/v3.1/alpha/" + nameOrCode;
                 response = fetchApiResponse(url);
             }
 
-            // Si todavía no se encuentra el país
+            // If still not found
             if (response.getBody() == null || response.getBody().isEmpty()) {
                 return ResponseEntity.status(404).body("El país '" + nameOrCode + "' no fue encontrado.");
             }
 
             Map<String, Object> countryData = response.getBody().get(0);
-
-            // Construir la respuesta con los detalles del país
             CountryDetailsDto countryDetails = buildCountryDetails(countryData);
             return ResponseEntity.ok(countryDetails);
         } catch (HttpClientErrorException.NotFound e) {
@@ -64,44 +75,47 @@ public class CountryController {
     }
 
     @Cacheable(value = "neighbors", key = "#countryName")
+    @Operation(summary = "Get neighboring countries", description = "Fetches a list of neighboring countries for a given country.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Neighboring countries retrieved successfully"),
+            @ApiResponse(responseCode = "404", description = "Country not found"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
     @GetMapping("/{countryName}/neighbors")
-    public ResponseEntity<Object> getNeighbors(@PathVariable String countryName) {
+    public ResponseEntity<Object> getNeighbors(
+            @Parameter(description = "Name or alpha code of the country", example = "France or FRA")
+            @PathVariable String countryName) {
         try {
-            // Intentar buscar primero por nombre completo
             String url = apiUrl + "/v3.1/name/" + countryName + "?fullText=true";
             ResponseEntity<List<Map<String, Object>>> response = fetchApiResponse(url);
 
-            // Si no se encuentra por nombre, intentar por código alfa-3
+            // If not found, try alpha code
             if (response.getBody() == null || response.getBody().isEmpty()) {
                 url = apiUrl + "/v3.1/alpha/" + countryName;
                 response = fetchApiResponse(url);
             }
 
-            // Si todavía no se encuentra el país
+            // If still not found
             if (response.getBody() == null || response.getBody().isEmpty()) {
                 return ResponseEntity.status(404).body("El país '" + countryName + "' no fue encontrado.");
             }
 
-            // Procesar los datos del país encontrado
             Map<String, Object> countryData = response.getBody().get(0);
             List<String> borders = (List<String>) countryData.get("borders");
 
             if (borders == null || borders.isEmpty()) {
-                return ResponseEntity.ok(Collections.emptyList()); // No tiene vecinos
+                return ResponseEntity.ok(Collections.emptyList()); // No neighbors
             }
 
-            // Obtener los nombres de los países vecinos
             List<String> neighborNames = fetchNeighborNames(borders);
             return ResponseEntity.ok(neighborNames);
-
         } catch (HttpClientErrorException.NotFound e) {
-            // Manejo explícito de error 404
             return ResponseEntity.status(404).body("El país '" + countryName + "' no fue encontrado.");
         } catch (Exception e) {
-            // Captura de errores generales
             return ResponseEntity.status(500).body("Error al obtener los datos: " + e.getMessage());
         }
     }
+
 
     // Helper Methods
     private ResponseEntity<List<Map<String, Object>>> fetchApiResponse(String url) {
