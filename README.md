@@ -30,7 +30,8 @@ Pais sin vecinos
 - http://localhost:8080/country/Australia/neighbors
 
 
-Resultados de la busqueda Spain
+Resultados de la busqueda Spain: 
+
 {
   "officialName": "Kingdom of Spain",
   "capital": "Madrid",
@@ -72,7 +73,8 @@ Resultados de la busqueda Spain
   ]
 }
 
-Resultados de la busqueda de los vecinos de Spain
+Resultados de la busqueda de los vecinos de Spain:
+
 [
   "Andorra",
   "France",
@@ -81,10 +83,12 @@ Resultados de la busqueda de los vecinos de Spain
   "Morocco"
 ]
 
-Resultado de la busqueda de un pais que no existe
+Resultado de la busqueda de un pais que no existe:
+
 El pai­s 'AAA' no fue encontrado.
 
-Resultado de la busqueda de un pais sin vecinos
+Resultado de la busqueda de un pais sin vecinos:
+
 {
   "officialName": "Commonwealth of Australia",
   "capital": "Canberra",
@@ -97,5 +101,6 @@ Resultado de la busqueda de un pais sin vecinos
   "neighbors": []
 }
 
-Resultados de la busqueda de los vecinos de un pais sin vecinos
+Resultados de la busqueda de los vecinos de un pais sin vecinos:
+
 []
