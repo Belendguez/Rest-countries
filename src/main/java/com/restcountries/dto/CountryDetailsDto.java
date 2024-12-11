@@ -8,7 +8,7 @@ public class CountryDetailsDto {
     private String capital;
     private String region;
     private Number population;
-    private Map<String, String> officialLanguages; // Idiomas oficiales
+    private Map<String, String> officialLanguages;
     private String flagUrl;
     private List<NeighborCountryDto> neighbors;
 

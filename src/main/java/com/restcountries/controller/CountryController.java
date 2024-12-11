@@ -33,7 +33,7 @@ public class CountryController {
     public CountryController(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
     }
-
+    //Endpoints
     @Cacheable(value = "countries", key = "#nameOrCode")
     @Operation(summary = "Get country details", description = "Fetches details of a country by its name or alpha code.")
     @ApiResponses(value = {
@@ -49,17 +49,17 @@ public class CountryController {
             String url;
             ResponseEntity<List<Map<String, Object>>> response;
 
-            // Attempt to fetch by full name
+            // Intentamos buscarlo por nombre
             url = apiUrl + "/v3.1/name/" + nameOrCode + "?fullText=true";
             response = fetchApiResponse(url);
 
-            // If not found, try alpha code
+            // Si no, se intenta por el codigo Alpha
             if (response.getBody() == null || response.getBody().isEmpty()) {
                 url = apiUrl + "/v3.1/alpha/" + nameOrCode;
                 response = fetchApiResponse(url);
             }
 
-            // If still not found
+            // Y si todavía no se encuentra, error.
             if (response.getBody() == null || response.getBody().isEmpty()) {
                 return ResponseEntity.status(404).body("El país '" + nameOrCode + "' no fue encontrado.");
             }
@@ -89,13 +89,11 @@ public class CountryController {
             String url = apiUrl + "/v3.1/name/" + countryName + "?fullText=true";
             ResponseEntity<List<Map<String, Object>>> response = fetchApiResponse(url);
 
-            // If not found, try alpha code
             if (response.getBody() == null || response.getBody().isEmpty()) {
                 url = apiUrl + "/v3.1/alpha/" + countryName;
                 response = fetchApiResponse(url);
             }
 
-            // If still not found
             if (response.getBody() == null || response.getBody().isEmpty()) {
                 return ResponseEntity.status(404).body("El país '" + countryName + "' no fue encontrado.");
             }
@@ -104,7 +102,7 @@ public class CountryController {
             List<String> borders = (List<String>) countryData.get("borders");
 
             if (borders == null || borders.isEmpty()) {
-                return ResponseEntity.ok(Collections.emptyList()); // No neighbors
+                return ResponseEntity.ok(Collections.emptyList()); // No hay vecinos
             }
 
             List<String> neighborNames = fetchNeighborNames(borders);
@@ -117,7 +115,7 @@ public class CountryController {
     }
 
 
-    // Helper Methods
+    // Helpers
     private ResponseEntity<List<Map<String, Object>>> fetchApiResponse(String url) {
         try {
             return restTemplate.exchange(
@@ -190,7 +188,7 @@ public class CountryController {
         }
         return neighborNames;
     }
-
+    //Por alguna razon Population puede ser Int o Long, por lo que es necesario una traducción.
     private Long getPopulationValue(Object populationObj) {
         if (populationObj instanceof Long) {
             return (Long) populationObj;
