@@ -12,7 +12,7 @@ public class SwaggerConfig {
     public OpenAPI customOpenAPI() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("API de Países")
+                        .title("API de Paises")
                         .version("1.0")
                         .description("API para consultar información de países y sus vecinos."));
     }

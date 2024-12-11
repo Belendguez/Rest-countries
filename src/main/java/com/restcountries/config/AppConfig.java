@@ -7,7 +7,7 @@ import org.springframework.web.client.RestTemplate;
 @Configuration
 public class AppConfig {
 
-    // Definir un bean de RestTemplate para hacer las solicitudes HTTP
+    // Definir un RestTemplate para hacer las solicitudes HTTP
     @Bean
     public RestTemplate restTemplate() {
         return new RestTemplate();
