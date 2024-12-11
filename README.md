@@ -1,16 +1,21 @@
-Proyecto REST-COUNTRIES
+Proyecto REST-COUNTRIES:
+
 El proyecto esta codificado en Java 11.
 
-Instalar dependecias
+Instalar dependecias:
+
 mvn clean install
 
-Ejecuta la aplicación Spring Boot 
+Ejecuta la aplicación Spring Boot:
+ 
 mvn spring-boot:run
 
-Abrir la página home
+Abrir la página home:
+
 http://localhost:8080
 
-Abrir Swagger
+Abrir Swagger:
+
 http://localhost:8080/swagger-ui/index.html
 
 Para hacer pruebas, lo mas sencillo es abrir el navegador ha introducir las siguientes direcciones
